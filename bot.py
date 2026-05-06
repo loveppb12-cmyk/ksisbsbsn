@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.enums import ChatType
+from pyrogram.errors import RPCError
 
 # ---------- CONFIGURATION ----------
 API_ID = 20284828
@@ -14,14 +15,14 @@ STRING_SESSION = "BQE1hZwAp_OoAIx-rGQFLFol4g41WGiIyUNB8PhbqQXA0sMiGI1HKEt-dN9ihQ
 # Time in seconds after which bot messages will be deleted
 DELAY_SECONDS = 100
 
-# Userbot will work in groups where it is admin with "Delete messages" right
 # ---------- END CONFIGURATION ----------
 
+# Create client with string session using the correct method
 app = Client(
     "userbot_session",
     api_id=API_ID,
     api_hash=API_HASH,
-    string_session=STRING_SESSION
+    session_string=STRING_SESSION  # Changed from 'string_session' to 'session_string'
 )
 
 # Store messages to delete with their timestamps
@@ -36,6 +37,8 @@ async def delayed_delete(chat_id: int, message_id: int, delete_at: datetime):
     try:
         await app.delete_messages(chat_id, message_id)
         print(f"[INFO] Deleted bot message {message_id} in chat {chat_id}")
+    except RPCError as e:
+        print(f"[WARN] RPC Error deleting message {message_id}: {e}")
     except Exception as e:
         print(f"[WARN] Failed to delete message {message_id}: {e}")
 
@@ -85,14 +88,19 @@ async def main():
     print("[START] UserBot is starting...")
     print(f"[INFO] Will delete bot messages after {DELAY_SECONDS} seconds")
     print("[INFO] Make sure the userbot is admin in target groups with 'Delete messages' right")
-    await app.start()
     
-    me = await app.get_me()
-    print(f"[INFO] Logged in as: {me.first_name} (@{me.username})")
-    print("[INFO] UserBot is now running. Press Ctrl+C to stop.")
-    
-    # Keep the bot alive
-    await asyncio.Event().wait()
+    try:
+        await app.start()
+        
+        me = await app.get_me()
+        print(f"[INFO] Logged in as: {me.first_name} (@{me.username})")
+        print("[INFO] UserBot is now running. Press Ctrl+C to stop.")
+        
+        # Keep the bot alive
+        await asyncio.Event().wait()
+    except Exception as e:
+        print(f"[ERROR] Failed to start: {e}")
+        raise
 
 if __name__ == "__main__":
     try:
