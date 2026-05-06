@@ -1,10 +1,8 @@
 import asyncio
-import re
 from datetime import datetime, timedelta
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pyrogram.enums import ChatType
 from pyrogram.errors import RPCError
 
 # ---------- CONFIGURATION ----------
@@ -17,15 +15,15 @@ DELAY_SECONDS = 100
 
 # ---------- END CONFIGURATION ----------
 
-# Create client with string session using the correct method
+# Create client - Pyrogram v2+ compatible way
 app = Client(
-    "userbot_session",
+    name="userbot_session",
     api_id=API_ID,
     api_hash=API_HASH,
-    session_string=STRING_SESSION  # Changed from 'string_session' to 'session_string'
+    session_string=STRING_SESSION  # This is correct for Pyrogram v2+
 )
 
-# Store messages to delete with their timestamps
+# Store pending deletion tasks
 pending_deletions = {}
 
 async def delayed_delete(chat_id: int, message_id: int, delete_at: datetime):
@@ -36,11 +34,11 @@ async def delayed_delete(chat_id: int, message_id: int, delete_at: datetime):
         await asyncio.sleep(wait_seconds)
     try:
         await app.delete_messages(chat_id, message_id)
-        print(f"[INFO] Deleted bot message {message_id} in chat {chat_id}")
+        print(f"[✓] Deleted bot message {message_id} in chat {chat_id}")
     except RPCError as e:
-        print(f"[WARN] RPC Error deleting message {message_id}: {e}")
+        print(f"[✗] RPC Error deleting message {message_id}: {e}")
     except Exception as e:
-        print(f"[WARN] Failed to delete message {message_id}: {e}")
+        print(f"[✗] Failed to delete message {message_id}: {e}")
 
 @app.on_message(filters.group & ~filters.me)
 async def handle_bot_messages(client: Client, message: Message):
@@ -53,19 +51,21 @@ async def handle_bot_messages(client: Client, message: Message):
         # Schedule deletion after DELAY_SECONDS
         delete_at = datetime.now() + timedelta(seconds=DELAY_SECONDS)
         
-        # Cancel any pending deletion for this message (should not happen)
+        # Create unique key for this message
         key = f"{chat_id}_{message_id}"
+        
+        # Cancel existing task if any (shouldn't happen)
         if key in pending_deletions:
             pending_deletions[key].cancel()
         
-        # Create and store task
+        # Create and store deletion task
         task = asyncio.create_task(delayed_delete(chat_id, message_id, delete_at))
         pending_deletions[key] = task
         
         # Clean up reference when done
         task.add_done_callback(lambda t: pending_deletions.pop(key, None))
         
-        print(f"[INFO] Scheduled bot message {message_id} for deletion in {DELAY_SECONDS}s")
+        print(f"[→] Scheduled bot message {message_id} for deletion in {DELAY_SECONDS}s")
 
 @app.on_message(filters.command("start") & filters.private)
 async def start_command(client: Client, message: Message):
@@ -90,17 +90,23 @@ async def main():
     print("[INFO] Make sure the userbot is admin in target groups with 'Delete messages' right")
     
     try:
+        # Start the client
         await app.start()
         
+        # Get bot info
         me = await app.get_me()
-        print(f"[INFO] Logged in as: {me.first_name} (@{me.username})")
+        print(f"[✓] Logged in as: {me.first_name} (@{me.username})")
+        print(f"[✓] User ID: {me.id}")
         print("[INFO] UserBot is now running. Press Ctrl+C to stop.")
         
-        # Keep the bot alive
+        # Keep the bot running
         await asyncio.Event().wait()
+        
     except Exception as e:
         print(f"[ERROR] Failed to start: {e}")
         raise
+    finally:
+        await app.stop()
 
 if __name__ == "__main__":
     try:
